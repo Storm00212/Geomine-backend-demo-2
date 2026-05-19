@@ -1,0 +1,717 @@
+{
+  "info": {
+    "name": "GroundPulse – Integrated Mine Health Dashboard v2.0",
+    "_postman_id": "groundpulse-imhd-v2",
+    "description": "## GroundPulse – Integrated Mine Health Dashboard\n\n> *The balance every mine manager or artisanal miner wants to achieve.*\n\nThree integrated pillars working together:\n\n| Pillar | Focus | Key Endpoints |\n|--------|-------|---------------|\n| **1 – Predictive Maintenance** | Predict failures before breakdowns | `/assets` `/maintenance/recommendations` `/maintenance/schedule` |\n| **2 – Safety & Hazard Alerts** | Real-time gas, dust, temp, seismic, unsafe zones | `/sensors/readings` `/safety/incidents` `/fleet/hazard-zones` |\n| **3 – Fleet & Operational Efficiency** | Utilization, fuel, idle time, productivity | `/fleet/utilization` `/fleet/fuel-analysis` `/fleet/idle-alerts` |\n\n**Start here:** `GET /dashboard` — returns all three pillars in a single Mine Health Score.\n\n---\n\n### Auth — X-API-Key header\n| Key | Role | Access |\n|-----|------|--------|\n| `demo-operator-key-001` | Operator | All 3 mines |\n| `demo-admin-key-999` | Admin | All 3 mines |\n| `demo-readonly-key-002` | Viewer | mine-001 only |\n\n### Run folders in order — test scripts auto-capture IDs, no copy-paste needed.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url",        "value": "http://localhost:3000" },
+    { "key": "api_key",         "value": "demo-operator-key-001" },
+    { "key": "incident_id",     "value": "inc-seed-002",  "description": "Pre-seeded open critical seismic incident" },
+    { "key": "new_incident_id", "value": "" },
+    { "key": "new_work_order",  "value": "" },
+    { "key": "new_rec_id",      "value": "" },
+    { "key": "new_zone_id",     "value": "" }
+  ],
+  "item": [
+    {
+      "name": "0 — Start Here: Health & Integrated Dashboard",
+      "description": "Open with these two requests. They frame the entire platform in under 2 minutes.",
+      "item": [
+        {
+          "name": "Health check — platform identity",
+          "request": { "method": "GET", "url": "{{base_url}}/health",
+            "description": "No auth. Confirms the API is live. The description field states the three pillars explicitly — mirrors Eng Cyrus's brief." },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('API healthy', () => {",
+            "  const j = pm.response.json();",
+            "  pm.expect(j.status).to.eql('ok');",
+            "  console.log('Service:', j.service);",
+            "  console.log('Description:', j.description);",
+            "  console.log('Pillars:');",
+            "  Object.entries(j.pillars).forEach(([k,v]) => console.log('  '+k+':', v));",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "🏥 Integrated Mine Health Dashboard — ALL MINES",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": "{{base_url}}/dashboard",
+            "description": "**The star of the demo.** One call returns all three pillars for every mine, plus a composite Mine Health Score (0–100).\n\nScore breakdown:\n- Safety 40%\n- Maintenance 35%\n- Fleet 25%\n\nPre-loaded with realistic data so every field is populated immediately.\n\n**Demo note:** Show the mine_health_score first, then drill into each pillar. This is the slide a mine manager would open every morning."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Dashboard returned', () => {",
+            "  const j = pm.response.json();",
+            "  console.log('=== INTEGRATED MINE HEALTH DASHBOARD ===');",
+            "  console.log('Platform health score:', j.platform_health_score, '/ 100 —', j.platform_health_rating);",
+            "  console.log('');",
+            "  j.mines.forEach(m => {",
+            "    console.log('── '+m.mine_name+' ('+m.county+') ──');",
+            "    console.log('  Health score:', m.mine_health_score, '/ 100 —', m.mine_health_rating);",
+            "    const p1 = m.pillar_1_predictive_maintenance;",
+            "    const p2 = m.pillar_2_safety_hazard_alerts;",
+            "    const p3 = m.pillar_3_fleet_operational_efficiency;",
+            "    console.log('');",
+            "    console.log('  PILLAR 1 — Predictive Maintenance:');",
+            "    console.log('   Assets:', p1.assets_total, '| Operational:', p1.assets_operational);",
+            "    console.log('   Open AI recs:', p1.open_ai_recommendations, '| Critical:', p1.critical_recommendations);",
+            "    if (p1.top_alert) console.log('   ⚠️  Top alert:', p1.top_alert.finding?.slice(0,70));",
+            "    console.log('');",
+            "    console.log('  PILLAR 2 — Safety & Hazard Alerts:');",
+            "    console.log('   Sensors in alert:', p2.sensors_in_alert, '/ '+p2.sensors_total);",
+            "    console.log('   Open incidents:', p2.open_incidents, '| Critical:', p2.critical_open_incidents);",
+            "    console.log('   Active hazard zones:', p2.active_hazard_zones);",
+            "    if (p2.active_hazard_types.length) console.log('   Hazard types:', p2.active_hazard_types.join(', '));",
+            "    console.log('');",
+            "    console.log('  PILLAR 3 — Fleet & Efficiency:');",
+            "    console.log('   Avg utilization:', p3.avg_fleet_utilization_percent+'%');",
+            "    console.log('   Total tonnes moved:', p3.total_tonnes_moved);",
+            "    console.log('   Total fuel consumed:', p3.total_fuel_consumed_litres, 'L');",
+            "    console.log('   Underperforming assets:', p3.underperforming_assets.length);",
+            "    console.log('');",
+            "  });",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "🏥 Integrated Dashboard — single mine (mine-001)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": { "raw": "{{base_url}}/dashboard?mine_id=mine-001",
+              "host": ["{{base_url}}"], "path": ["dashboard"],
+              "query": [{ "key": "mine_id", "value": "mine-001" }] },
+            "description": "Same dashboard scoped to Kakamega Gold Belt only. A site manager would use this."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Single mine dashboard', () => {",
+            "  const j = pm.response.json();",
+            "  pm.expect(j.mines).to.have.lengthOf(1);",
+            "  const m = j.mines[0];",
+            "  console.log('Mine:', m.mine_name);",
+            "  console.log('Health score:', m.mine_health_score, '/', 100, '—', m.mine_health_rating);",
+            "  console.log('Safety score:', m.score_breakdown.safety_score, '| Maint:', m.score_breakdown.maintenance_score, '| Fleet:', m.score_breakdown.fleet_score);",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "API endpoint map",
+          "request": { "method": "GET", "url": "{{base_url}}/",
+            "description": "Full endpoint directory organized by pillar. No auth required." },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Directory returned', () => {",
+            "  const j = pm.response.json();",
+            "  console.log(j.tagline);",
+            "  console.log('Total endpoint groups:', Object.keys(j.endpoints).filter(k=>k.startsWith('━')).length);",
+            "});"
+          ]}}]
+        }
+      ]
+    },
+    {
+      "name": "1 — Predictive Equipment Maintenance",
+      "description": "Predict equipment failures before breakdowns using operational and sensor data.",
+      "item": [
+        {
+          "name": "Asset registry — all equipment",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": "{{base_url}}/assets",
+            "description": "6 pre-loaded assets: 2 haul trucks, 1 drill rig, 1 ventilation fan (critical), 1 conveyor (under maintenance), 1 dewatering pump.\n\nEach shows operating hours, hours to next service, and criticality rating.\n\n**Demo note:** The console log shows a 🔴/🟡/🟢 flag per asset — makes the urgency immediately visible."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Assets returned', () => {",
+            "  const j = pm.response.json();",
+            "  console.log('Total assets:', j.count);",
+            "  j.assets.forEach(a => {",
+            "    const hrs = a.next_service_due_hours - a.operating_hours;",
+            "    const f = hrs < 0 ? '🔴 OVERDUE' : hrs < 200 ? '🟡 IMMINENT' : '🟢';",
+            "    console.log(' '+f+' '+a.asset_tag+' | '+a.name+' | '+a.status+' | '+hrs+'h to service | criticality: '+a.criticality);",
+            "  });",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "Asset detail — drill rig (approaching service)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": "{{base_url}}/assets/asset-002",
+            "description": "Sandvik DP1100i — 160 hours from its 250-hour service. Shows maintenance history, last service date, and open AI recommendations.\n\nTry asset-003 (ventilation fan) or asset-006 (pump) for assets with open critical recommendations."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Asset detail returned', () => {",
+            "  const j = pm.response.json();",
+            "  console.log('Asset:', j.name, '|', j.asset_tag);",
+            "  console.log('Operating hours:', j.operating_hours, '| Hours to service:', j.hours_to_next_service);",
+            "  console.log('Last service:', j.last_maintenance?.completed_at?.slice(0,10) || 'none on record');",
+            "  console.log('Open AI recommendations:', j.open_recommendations);",
+            "  j.recent_recommendations?.forEach(r => console.log(' ⚠️ ['+r.priority+'] '+r.finding?.slice(0,80)));",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "Maintenance schedule — urgency-ranked",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": "{{base_url}}/maintenance/schedule",
+            "description": "Every asset ranked by urgency: overdue → imminent (<100h) → upcoming (<300h) → scheduled.\n\n**Demo note:** This is the proactive view — the platform tells you what's coming before it fails. A mine manager can plan the week's maintenance from this one response."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Schedule returned', () => {",
+            "  const j = pm.response.json();",
+            "  const s = j.summary;",
+            "  console.log('=== MAINTENANCE SCHEDULE ===');",
+            "  console.log('Overdue:', s.overdue, '| Imminent:', s.imminent_within_100_hours, '| Upcoming:', s.upcoming_within_300_hours);",
+            "  console.log('');",
+            "  j.schedule.forEach(a => {",
+            "    const f = a.service_urgency==='overdue'?'🔴':a.service_urgency==='imminent'?'🟡':'🟢';",
+            "    console.log(' '+f+' '+a.asset_tag+' | '+a.service_urgency.toUpperCase()+' | '+a.hours_to_service+'h | open recs: '+a.open_recommendations);",
+            "  });",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "AI recommendations — with ROI analysis",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": "{{base_url}}/maintenance/recommendations",
+            "description": "3 pre-seeded AI recommendations (drill rig hours threshold, pump sensor anomaly, truck tyre pressure) with failure risk %, preventive cost, and failure-if-ignored cost.\n\n**The cost_analysis block is your commercial slide** — ROI multiplier shows spending KSh X prevents KSh Y in failure costs."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Recommendations returned', () => {",
+            "  const j = pm.response.json();",
+            "  const c = j.cost_analysis;",
+            "  console.log('Open recommendations:', j.count);",
+            "  console.log('Preventive cost: KSh', c.total_preventive_cost_ksh?.toLocaleString());",
+            "  console.log('Failure cost avoided: KSh', c.total_avoided_failure_cost_ksh?.toLocaleString());",
+            "  console.log('ROI multiplier:', c.estimated_roi_multiplier+'x');",
+            "  console.log('');",
+            "  j.recommendations.forEach(r => {",
+            "    const f = r.priority==='critical'?'🔴':r.priority==='high'?'🟡':'🟢';",
+            "    console.log(' '+f+' ['+r.priority.toUpperCase()+'] '+r.asset_id+' | failure risk: '+r.estimated_failure_risk_percent+'%');",
+            "    console.log('   Trigger: '+r.trigger);",
+            "    console.log('   Finding: '+r.finding?.slice(0,90));",
+            "    console.log('   Action: '+r.recommended_action?.slice(0,90));",
+            "    console.log('   Cost if ignored: KSh '+r.estimated_repair_cost_if_unaddressed_ksh?.toLocaleString()+' | Preventive: KSh '+r.preventive_cost_ksh?.toLocaleString());",
+            "  });",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "Generate AI recommendation — ventilation fan",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/maintenance/recommendations/generate",
+            "body": { "mode": "raw", "options": { "raw": { "language": "json" } }, "raw": "{\n  \"asset_id\": \"asset-003\"\n}" },
+            "description": "Runs the predictive model for the ABB ventilation fan (criticality=critical, 42,100 operating hours). Returns failure risk %, urgency, recommended action, and cost comparison.\n\nTest with any asset_id — the model adjusts recommendation based on hours to service."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Recommendation generated', () => {",
+            "  pm.expect(pm.response.code).to.eql(201);",
+            "  const r = pm.response.json().recommendation;",
+            "  pm.collectionVariables.set('new_rec_id', r.id);",
+            "  console.log('Asset:', r.asset_id, '| Priority:', r.priority.toUpperCase(), '| Failure risk:', r.estimated_failure_risk_percent+'%');",
+            "  console.log('Finding:', r.finding);",
+            "  console.log('Action:', r.recommended_action);",
+            "  console.log('Preventive: KSh', r.preventive_cost_ksh?.toLocaleString(), '| If ignored: KSh', r.estimated_repair_cost_if_unaddressed_ksh?.toLocaleString());",
+            "  console.log('→ ID saved to new_rec_id for acknowledge step');",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "Acknowledge recommendation",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/maintenance/recommendations/{{new_rec_id}}/acknowledge",
+            "body": { "mode": "raw", "options": { "raw": { "language": "json" } }, "raw": "{\n  \"acknowledged_by\": \"James Kariuki – Maintenance Supervisor\"\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Acknowledged', () => { const j=pm.response.json(); pm.expect(j.recommendation.status).to.eql('acknowledged'); console.log('Acknowledged by:', j.recommendation.acknowledged_by, 'at', j.recommendation.acknowledged_at); });"
+          ]}}]
+        },
+        {
+          "name": "Create work order (AI-triggered)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/maintenance",
+            "body": { "mode": "raw", "options": { "raw": { "language": "json" } },
+              "raw": "{\n  \"asset_id\": \"asset-003\",\n  \"mine_id\": \"mine-001\",\n  \"type\": \"scheduled\",\n  \"description\": \"2000-hour service: bearing inspection, impeller balance, motor current test, belt tension check\",\n  \"priority\": \"high\",\n  \"triggered_by\": \"predictive_alert\",\n  \"assigned_to\": \"Faith Wanjiku – Senior Technician\",\n  \"scheduled_at\": \"2025-05-20T06:00:00Z\"\n}" },
+            "description": "triggered_by=predictive_alert shows the AI→work order workflow. A new work order number is auto-generated."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Work order created', () => {",
+            "  pm.expect(pm.response.code).to.eql(201);",
+            "  const j = pm.response.json();",
+            "  pm.collectionVariables.set('new_work_order', j.id);",
+            "  console.log('Work order:', j.work_order, '| Asset:', j.asset_id, '| Priority:', j.priority);",
+            "  console.log('Triggered by:', j.triggered_by, '| Assigned to:', j.assigned_to);",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "Complete work order",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/maintenance/{{new_work_order}}/complete",
+            "body": { "mode": "raw", "options": { "raw": { "language": "json" } },
+              "raw": "{\n  \"downtime_hours\": 6.5,\n  \"parts_used\": [\"SKF 6318 bearing x2\", \"Impeller balance weights\", \"V-belt set x1\"],\n  \"cost_ksh\": 38500,\n  \"technician_notes\": \"Drive-side bearing worn. Replaced. Fan balanced to ISO 1940 G2.5. Motor current passed. Next inspection at 44000 hours.\"\n}" },
+            "description": "Auto-updates the asset's last_service_at and next_service_due_hours. Logs downtime, parts, cost — feeds the analytics/maintenance-performance cost tracking."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Work order completed', () => {",
+            "  const j = pm.response.json();",
+            "  pm.expect(j.record.status).to.eql('completed');",
+            "  console.log('Completed at:', j.record.completed_at);",
+            "  console.log('Downtime:', j.record.downtime_hours, 'h | Cost: KSh', j.record.cost_ksh?.toLocaleString());",
+            "  console.log('Parts:', j.record.parts_used?.join(', '));",
+            "});"
+          ]}}]
+        }
+      ]
+    },
+    {
+      "name": "2 — Smart Safety & Hazard Alerts",
+      "description": "Real-time monitoring and automated alerts for gas, dust, temperature, seismic events, and unsafe zones.",
+      "item": [
+        {
+          "name": "✅ Ingest — NORMAL atmospheric reading",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/sensors/readings",
+            "body": { "mode": "raw", "options": { "raw": { "language": "json" } },
+              "raw": "{\n  \"sensor_id\": \"sns-001\",\n  \"readings\": {\n    \"co_ppm\": 4.2,\n    \"ch4_percent_lel\": 1.8,\n    \"o2_percent\": 20.5,\n    \"temperature_c\": 28.1,\n    \"dust_mg_m3\": 1.2,\n    \"humidity_percent\": 65\n  }\n}" },
+            "description": "All 6 readings within safe limits. Expected: status=normal, anomalies_detected=false.\n\n**Demo note:** Show this first, then show the multi-hazard alert below. The contrast makes the detection logic clear."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Normal — no hazards', () => {",
+            "  const j = pm.response.json();",
+            "  pm.expect(j.status).to.eql('normal');",
+            "  console.log('Status:', j.status, '| Anomalies detected:', j.anomalies_detected);",
+            "  console.log('Readings:', JSON.stringify(j.readings, null, 2));",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "🚨 Ingest — CO + DUST + TEMP hazards (multi-breach)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/sensors/readings",
+            "body": { "mode": "raw", "options": { "raw": { "language": "json" } },
+              "raw": "{\n  \"sensor_id\": \"sns-001\",\n  \"readings\": {\n    \"co_ppm\": 22.7,\n    \"ch4_percent_lel\": 3.1,\n    \"o2_percent\": 20.1,\n    \"temperature_c\": 38.4,\n    \"dust_mg_m3\": 4.8,\n    \"humidity_percent\": 92\n  }\n}" },
+            "description": "Three simultaneous breaches:\n- CO: 22.7 ppm (limit 15) — carbon monoxide poisoning risk\n- Temperature: 38.4°C (limit 35) — heat stress\n- Dust: 4.8 mg/m³ (limit 3.0) — silicosis risk\n\nEach anomaly includes the hazard description explaining WHY it matters. Auto-creates a safety incident.\n\n**Demo note:** This is pillar 2's key moment — the platform identifies multiple simultaneous hazards in one reading."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Multi-hazard alert created', () => {",
+            "  const j = pm.response.json();",
+            "  pm.expect(j.status).to.eql('alert');",
+            "  pm.collectionVariables.set('new_incident_id', j.incident_id);",
+            "  console.log('🚨 MULTI-HAZARD DETECTED');",
+            "  j.anomalies.forEach(a => {",
+            "    console.log(' BREACH: '+a.field+' = '+a.value+a.unit+' (limit: '+a.threshold+a.unit+')');",
+            "    console.log('   Hazard: '+a.hazard_description);",
+            "  });",
+            "  console.log('Auto-incident ID:', j.incident_id, '→ saved to new_incident_id');",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "🚨 Ingest — O2 DEFICIENCY + seismic (critical combo)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/sensors/readings",
+            "body": { "mode": "raw", "options": { "raw": { "language": "json" } },
+              "raw": "{\n  \"sensor_id\": \"sns-002\",\n  \"readings\": {\n    \"peak_particle_velocity_mm_s\": 19.4,\n    \"frequency_hz\": 22.5,\n    \"peak_vector_sum_mm_s\": 21.1\n  }\n}" },
+            "description": "PPV at 19.4 mm/s — 1.6× above the 12 mm/s structural limit. Auto-classifies as CRITICAL.\n\nAlso try:\n`\"o2_percent\": 18.2` on sns-001 to trigger oxygen deficiency (below-minimum detection)."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Critical seismic detected', () => {",
+            "  const j = pm.response.json();",
+            "  console.log('PPV:', j.readings.peak_particle_velocity_mm_s, 'mm/s | Limit: 12 mm/s');",
+            "  console.log('Status:', j.status, '| Incident:', j.incident_id);",
+            "  j.anomalies?.forEach(a => console.log(' BREACH: '+a.field+' — '+a.hazard_description));",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "Active hazard zones",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": "{{base_url}}/fleet/hazard-zones",
+            "description": "3 pre-seeded zones: blast exclusion, geotechnical hazard (unstable hanging wall), high dust zone.\n\n**Demo note:** These are geo-fenced areas. In production, GPS on haul trucks triggers an alert when equipment approaches a hazard zone boundary."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Hazard zones returned', () => {",
+            "  const j = pm.response.json();",
+            "  console.log('Active hazard zones:', j.active_zones);",
+            "  j.hazard_zones.forEach(z => {",
+            "    console.log(' 🚧 ['+z.type+'] '+z.name);",
+            "    console.log('   Radius: '+z.radius_m+'m | Status: '+z.status);",
+            "    console.log('   Reason: '+z.reason);",
+            "  });",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "Declare a new hazard zone",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/fleet/hazard-zones",
+            "body": { "mode": "raw", "options": { "raw": { "language": "json" } },
+              "raw": "{\n  \"mine_id\": \"mine-001\",\n  \"name\": \"Shaft C – Water Inrush Risk Zone\",\n  \"type\": \"geotechnical_hazard\",\n  \"coordinates\": { \"lat\": 0.2824, \"lng\": 34.7514 },\n  \"radius_m\": 75,\n  \"reason\": \"Dewatering pump failure detected at Sump Level 4. Water accumulation risk — all personnel evacuated from zone pending pump repair.\",\n  \"created_by\": \"Mine Overseer – Joseph Were\"\n}" },
+            "description": "Declaring a hazard zone also auto-creates a safety incident — the two are linked. The zone ID is returned for the clear step.\n\n**Demo note:** This shows the platform isn't just passive monitoring — safety officers can actively manage the mine environment through the API."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Hazard zone declared', () => {",
+            "  pm.expect(pm.response.code).to.eql(201);",
+            "  const j = pm.response.json();",
+            "  pm.collectionVariables.set('new_zone_id', j.zone.id);",
+            "  console.log('Zone declared:', j.zone.name, '| Type:', j.zone.type);",
+            "  console.log('Radius:', j.zone.radius_m, 'm | Status:', j.zone.status);",
+            "  console.log('Auto-linked incident ID:', j.incident_id);",
+            "  console.log('Zone ID saved to new_zone_id');",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "All open incidents (by severity)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": { "raw": "{{base_url}}/safety/incidents?resolved=false",
+              "host": ["{{base_url}}"], "path": ["safety","incidents"],
+              "query": [{ "key": "resolved", "value": "false" }] },
+            "description": "All unresolved incidents: pre-seeded (seismic + equipment health) plus any you've created. Sorted newest first."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Open incidents', () => {",
+            "  const j = pm.response.json();",
+            "  console.log('Open incidents:', j.count);",
+            "  j.incidents.forEach(i => {",
+            "    const f = i.severity==='critical'?'🔴':'🟡';",
+            "    console.log(' '+f+' ['+i.severity+'] '+i.type+' | category: '+i.category);",
+            "    console.log('   '+i.description?.slice(0,90));",
+            "    if (i.hazards?.length) console.log('   Hazards:', i.hazards.map(h=>h.hazard).join('; '));",
+            "  });",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "Resolve seismic incident (pre-seeded)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/safety/incidents/{{incident_id}}/resolve",
+            "body": { "mode": "raw", "options": { "raw": { "language": "json" } },
+              "raw": "{\n  \"resolution_note\": \"Zone inspected. Ground survey complete — no structural damage. Event attributed to blasting at adjacent quarry. Geotech clearance issued. Workers re-admitted to Shaft A.\"\n}" },
+            "description": "incident_id is pre-filled (inc-seed-002). No copy-paste needed."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Incident resolved', () => { const j=pm.response.json(); pm.expect(j.incident.resolved).to.be.true; console.log('Resolved at:', j.incident.resolved_at); console.log('Note:', j.incident.resolution_note); });"
+          ]}}]
+        },
+        {
+          "name": "Clear hazard zone",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/fleet/hazard-zones/{{new_zone_id}}/clear",
+            "body": { "mode": "raw", "options": { "raw": { "language": "json" } },
+              "raw": "{\n  \"cleared_by\": \"Mine Overseer – Joseph Were\"\n}" },
+            "description": "Clears the water inrush zone declared above. Uses new_zone_id auto-captured."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Zone cleared', () => { if (!pm.collectionVariables.get('new_zone_id')) { console.log('Declare a zone first.'); return; } const j=pm.response.json(); pm.expect(j.zone.status).to.eql('cleared'); console.log('Zone', j.zone.name, 'cleared at', j.zone.cleared_at); });"
+          ]}}]
+        },
+        {
+          "name": "Compliance report — Kenya Mining Act 2016",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/safety/compliance/generate",
+            "body": { "mode": "raw", "options": { "raw": { "language": "json" } },
+              "raw": "{\n  \"mine_id\": \"mine-001\",\n  \"period_start\": \"2025-05-01\",\n  \"period_end\": \"2025-05-31\",\n  \"report_type\": \"safety_and_environmental\"\n}" },
+            "description": "Generates from live data. Flags COMPLIANT or NON-COMPLIANT automatically based on unresolved critical incidents. Submit target: DOSHI."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Compliance report generated', () => {",
+            "  const j = pm.response.json();",
+            "  const s = j.summary;",
+            "  console.log('=== COMPLIANCE REPORT ===');",
+            "  console.log('Mine:', j.mine_name, '| License:', j.license_number);",
+            "  console.log('Incidents:', s.total_incidents, '| Unresolved:', s.unresolved_incidents, '| Critical:', s.critical_incidents);",
+            "  console.log('Sensors online:', s.sensors_online+'/'+s.sensors_deployed);",
+            "  console.log('STATUS:', s.compliance_status);",
+            "  console.log('Submit to:', j.submitted_to);",
+            "});"
+          ]}}]
+        }
+      ]
+    },
+    {
+      "name": "3 — Fleet & Operational Efficiency",
+      "description": "Monitor equipment utilization, fuel use, idle time, and productivity trends.",
+      "item": [
+        {
+          "name": "Fleet utilization — all shifts",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": "{{base_url}}/fleet/utilization",
+            "description": "5 pre-seeded shift sessions: 2 shifts × CAT 785C (Kakamega), 2 shifts × CAT 793F (Kwale), 1 shift × Sandvik drill rig.\n\nReturns total tonnes moved, fuel consumed, loads completed, avg utilization %, and idle-to-operating ratio.\n\n**Demo note:** The idle_to_operating_ratio is the number that usually shocks mine managers — idle time is wasted fuel and lost productivity."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Utilization returned', () => {",
+            "  const j = pm.response.json();",
+            "  const s = j.fleet_summary;",
+            "  console.log('=== FLEET UTILIZATION ===');",
+            "  console.log('Sessions:', s.sessions_included);",
+            "  console.log('Avg utilization:', s.avg_utilization_percent+'%');",
+            "  console.log('Total operating hours:', s.total_operating_hours, '| Idle hours:', s.total_idle_hours);",
+            "  console.log('Idle ratio:', s.idle_to_operating_ratio, '('+Math.round(s.idle_to_operating_ratio*100)+'% of operating time)');",
+            "  console.log('Total fuel consumed:', s.total_fuel_consumed_litres, 'L | Cost: KSh', s.total_fuel_cost_ksh?.toLocaleString());",
+            "  console.log('Fuel efficiency:', s.fuel_efficiency_litres_per_tonne, 'L/tonne');",
+            "  console.log('Total tonnes moved:', s.total_tonnes_moved);",
+            "  console.log('');",
+            "  j.sessions.forEach(s => console.log(' '+s.asset_tag+' '+s.shift+' shift | util: '+s.utilization_percent+'% | idle: '+s.idle_hours+'h | '+s.tonnes_moved+'t | '+s.fuel_consumed_litres+'L'));",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "Filter utilization — Kakamega mine only",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": { "raw": "{{base_url}}/fleet/utilization?mine_id=mine-001",
+              "host": ["{{base_url}}"], "path": ["fleet","utilization"],
+              "query": [{ "key": "mine_id", "value": "mine-001" }] }
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Filtered utilization', () => { const j=pm.response.json(); console.log('Kakamega fleet sessions:', j.fleet_summary.sessions_included, '| Avg util:', j.fleet_summary.avg_utilization_percent+'%'); });"
+          ]}}]
+        },
+        {
+          "name": "Productivity — per-asset efficiency analysis",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": "{{base_url}}/fleet/productivity",
+            "description": "Per-asset breakdown with efficiency_flag: high_performer / adequate / underperforming.\n\nUnderperfoming assets show improvement_opportunity text explaining the likely cause (queuing, blast clearance, operator behaviour).\n\n**Demo note:** This is where the platform tells you which assets to investigate and why — not just that utilization is low."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Productivity returned', () => {",
+            "  const j = pm.response.json();",
+            "  console.log('Fleet health:', j.fleet_health.toUpperCase(), '| Underperforming:', j.assets_underperforming);",
+            "  j.productivity_by_asset.forEach(a => {",
+            "    const f = a.efficiency_flag==='high_performer'?'🟢':a.efficiency_flag==='adequate'?'🟡':'🔴';",
+            "    console.log(' '+f+' '+a.asset_tag+' | util: '+a.avg_utilization_percent+'% | '+a.efficiency_flag);",
+            "    console.log('   Idle ratio: '+a.idle_ratio+' | Fuel/tonne: '+a.fuel_per_tonne+' L/t | Tonnes: '+a.total_tonnes_moved);",
+            "    if (a.improvement_opportunity) console.log('   💡 '+a.improvement_opportunity);",
+            "  });",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "Fuel analysis — consumption & cost breakdown",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": "{{base_url}}/fleet/fuel-analysis",
+            "description": "Total fuel spend, litres-per-tonne efficiency, and per-asset fuel share. Shows which asset is burning the most fuel relative to its output.\n\n**Demo note:** For an artisanal miner, fuel is often the single largest operating cost. Litres-per-tonne is the key metric — lower is better."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Fuel analysis returned', () => {",
+            "  const j = pm.response.json();",
+            "  const s = j.summary;",
+            "  console.log('=== FUEL ANALYSIS ===');",
+            "  console.log('Total fuel:', s.total_fuel_consumed_litres, 'L | Cost: KSh', s.total_fuel_cost_ksh?.toLocaleString());",
+            "  console.log('Avg price: KSh', s.avg_fuel_price_per_litre_ksh, '/L');",
+            "  console.log('Fleet efficiency:', s.fleet_fuel_per_tonne, 'L/tonne | Per hour:', s.fleet_fuel_per_hour, 'L/hr');",
+            "  console.log('');",
+            "  console.log('By asset:');",
+            "  j.by_asset.forEach(a => console.log(' '+a.asset_tag+' | '+a.total_fuel_litres+'L ('+a.share_of_fleet_fuel_percent+'% of fleet) | '+a.fuel_per_tonne+' L/t'));",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "Idle alerts — excessive idle time flagged",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": "{{base_url}}/fleet/idle-alerts",
+            "description": "Flags any shift session where idle time exceeded 25% of total hours. Includes estimated wasted fuel in litres and a recommended action.\n\n**Demo note:** Every idle alert has a direct KSh cost attached — this makes the operational efficiency story concrete for mine management."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Idle alerts returned', () => {",
+            "  const j = pm.response.json();",
+            "  console.log('Idle threshold:', j.idle_threshold_percent+'% of shift | Alerts:', j.alerts_raised);",
+            "  j.idle_alerts.forEach(a => {",
+            "    console.log(' ⏸️  '+a.asset_tag+' — '+a.shift+' shift (operator: '+a.operator+')');",
+            "    console.log('   Idle: '+a.idle_hours+'h ('+a.idle_percent+'% of shift) | Threshold: '+a.threshold_percent+'%');",
+            "    console.log('   Estimated wasted fuel: '+a.estimated_wasted_fuel_litres+' L');",
+            "    console.log('   Action: '+a.recommended_action);",
+            "  });",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "Log a shift session",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/fleet/utilization",
+            "body": { "mode": "raw", "options": { "raw": { "language": "json" } },
+              "raw": "{\n  \"asset_id\": \"asset-001\",\n  \"mine_id\": \"mine-001\",\n  \"shift\": \"Day\",\n  \"date\": \"2025-05-17\",\n  \"operating_hours\": 10.5,\n  \"idle_hours\": 1.0,\n  \"downtime_hours\": 0.5,\n  \"fuel_consumed_litres\": 1020,\n  \"fuel_cost_ksh\": 133620,\n  \"loads_completed\": 38,\n  \"tonnes_moved\": 3230,\n  \"avg_cycle_time_min\": 16.6,\n  \"avg_speed_kmh\": 29.1,\n  \"gps_distance_km\": 306,\n  \"operator\": \"Moses Otieno\"\n}" },
+            "description": "Logs today's day shift for the CAT 785C. Utilization is auto-calculated from hours. Feeds into all utilization, productivity and fuel analytics."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Shift session logged', () => {",
+            "  pm.expect(pm.response.code).to.eql(201);",
+            "  const j = pm.response.json();",
+            "  console.log('Session logged:', j.asset_tag, j.shift, 'shift', j.date);",
+            "  console.log('Utilization:', j.utilization_percent+'% | Tonnes:', j.tonnes_moved, '| Fuel:', j.fuel_consumed_litres, 'L');",
+            "});"
+          ]}}]
+        }
+      ]
+    },
+    {
+      "name": "4 — Operational Analytics",
+      "description": "Cross-cutting analytics combining all three pillars — for management reporting.",
+      "item": [
+        {
+          "name": "Operational KPIs — all mines",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": "{{base_url}}/analytics/operational",
+            "description": "Per-mine: sensor uptime %, asset availability %, MTBF, maintenance costs, downtime hours, and a composite risk score with contributing factors.\n\n**Demo note:** Management-level view — the weekly briefing slide."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Operational KPIs returned', () => {",
+            "  const j = pm.response.json();",
+            "  console.log('Platform risk:', j.platform_risk_level.toUpperCase());",
+            "  j.operational_reports.forEach(m => {",
+            "    const k = m.kpis; const r = m.risk;",
+            "    console.log('\\n── '+m.mine_name+' ──');",
+            "    console.log('  Sensor uptime: '+k.sensor_uptime_percent+'% | Asset availability: '+k.asset_availability_percent+'%');",
+            "    console.log('  MTBF: '+k.mean_time_between_incidents_hours+'h | Open incidents: '+k.open_incidents);",
+            "    console.log('  Maintenance spend: KSh '+k.total_maintenance_cost_ksh?.toLocaleString()+' | Downtime: '+k.total_planned_downtime_hours+'h');",
+            "    console.log('  Risk: '+r.risk_score+'/100 — '+r.risk_level.toUpperCase());",
+            "  });",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "Risk matrix — likelihood × consequence",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": "{{base_url}}/analytics/risk",
+            "description": "Standard mining risk matrix format. Assets bucketed into critical / high / medium / low by likelihood × consequence.\n\n**Demo note:** Shows the company you use industry-standard risk language — important for HSE stakeholders and regulators."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Risk matrix returned', () => {",
+            "  const j = pm.response.json();",
+            "  const s = j.summary;",
+            "  console.log('Risk summary — Critical:', s.critical_risk, '| High:', s.high_risk, '| Medium:', s.medium_risk, '| Low:', s.low_risk);",
+            "  ['critical','high'].forEach(level => {",
+            "    if (j.risk_matrix[level]?.length) {",
+            "      console.log('\\n'+level.toUpperCase()+' RISK:');",
+            "      j.risk_matrix[level].forEach(a => console.log(' '+a.asset_tag+' | failure risk: '+a.failure_risk_percent+'% | '+a.risk_matrix.likelihood+'×'+a.risk_matrix.consequence));",
+            "    }",
+            "  });",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "Maintenance performance — AI ROI",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": "{{base_url}}/analytics/maintenance-performance",
+            "description": "Predictive AI share %, total spend, potential savings from open recommendations.\n\n**Demo note:** The 'potential savings' number and ROI multiplier are your commercial close — they quantify what the platform is worth."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Maintenance performance', () => {",
+            "  const j = pm.response.json();",
+            "  console.log('Work orders completed:', j.work_orders.total_completed);",
+            "  console.log('AI-triggered:', j.work_orders.triggered_by_predictive_ai, '('+j.work_orders.predictive_ai_share_percent+'%)');",
+            "  console.log('Total spend: KSh', j.cost_analysis.total_maintenance_spend_ksh?.toLocaleString());",
+            "  console.log('Potential savings (open recs): KSh', j.cost_analysis.potential_savings_from_open_recs_ksh?.toLocaleString());",
+            "  console.log('Open recs: Critical:', j.open_recommendations_summary.critical, '| High:', j.open_recommendations_summary.high);",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "Sensor health — calibration & coverage",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "{{api_key}}" }],
+            "url": "{{base_url}}/analytics/sensor-health",
+            "description": "Per-sensor: online status, alert rate %, calibration age, calibration status (current / due_soon / overdue).\n\nCalibration compliance is a regulatory requirement — showing automatic tracking is a differentiator."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Sensor health', () => {",
+            "  const j = pm.response.json();",
+            "  console.log('Sensors online:', j.online+'/'+j.total_sensors, '| Calibration overdue:', j.calibration_overdue);",
+            "  j.sensors.forEach(s => {",
+            "    const f = s.calibration_status==='overdue'?'🔴':s.calibration_status==='due_soon'?'🟡':'🟢';",
+            "    console.log(' '+f+' '+s.sensor_id+' | '+s.type+' | cal: '+s.calibration_status+' ('+s.calibration_age_days+'d) | alert rate: '+s.alert_rate_percent+'%');",
+            "  });",
+            "});"
+          ]}}]
+        }
+      ]
+    },
+    {
+      "name": "5 — Access Control",
+      "item": [
+        {
+          "name": "Viewer key — mine-001 only",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "demo-readonly-key-002" }],
+            "url": "{{base_url}}/dashboard",
+            "description": "Viewer key scoped to mine-001. Returns 1 mine in the dashboard even though 3 exist."
+          },
+          "event": [{ "listen": "test", "script": { "exec": [
+            "pm.test('Viewer sees 1 mine', () => { const j=pm.response.json(); pm.expect(j.mines).to.have.lengthOf(1); console.log('Viewer sees:', j.mines[0].mine_name); });"
+          ]}}]
+        },
+        {
+          "name": "No API key → 401",
+          "request": { "method": "GET", "url": "{{base_url}}/dashboard" },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('401', () => { pm.expect(pm.response.code).to.eql(401); console.log(pm.response.json().error); });"]}
+          }]
+        },
+        {
+          "name": "Wrong API key → 403",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-API-Key", "value": "invalid-key" }],
+            "url": "{{base_url}}/dashboard"
+          },
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('403', () => { pm.expect(pm.response.code).to.eql(403); console.log(pm.response.json().error); });"]}
+          }]
+        }
+      ]
+    }
+  ]
+}
