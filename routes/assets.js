@@ -7,7 +7,14 @@ router.get("/", (req, res) => {
   const result = mineId 
     ? assets.filter(a => a.mine_id === mineId) 
     : assets;
-  res.json(result);
+  
+  const assetsWithFlags = result.map(a => {
+    const hrs = a.next_service_due_hours - a.operating_hours;
+    const flag = hrs < 0 ? "🔴 OVERDUE" : hrs < 200 ? "🟡 IMMINENT" : "🟢";
+    return { ...a, service_urgency_flag: flag };
+  });
+  
+  res.json({ assets: assetsWithFlags, count: assetsWithFlags.length });
 });
 
 router.get("/:id", (req, res) => {
@@ -18,10 +25,17 @@ router.get("/:id", (req, res) => {
   const records = maintenanceRecords.filter(r => r.asset_id === asset.id);
   const recommendations = maintenanceRecommendations.filter(r => r.asset_id === asset.id);
   
+  const hrs = asset.next_service_due_hours - asset.operating_hours;
+  const serviceUrgency = hrs < 0 ? "overdue" : hrs < 200 ? "imminent" : "upcoming";
+  
   res.json({
     ...asset,
+    hours_to_next_service: hrs,
+    service_urgency: serviceUrgency,
     maintenance_records: records,
-    recommendations,
+    recent_recommendations: recommendations.filter(r => r.status !== "acknowledged").slice(0, 3),
+    open_recommendations: recommendations.filter(r => r.status === "open").length,
+    last_maintenance: records.filter(r => r.status === "completed").slice(0, 1)[0],
   });
 });
 
