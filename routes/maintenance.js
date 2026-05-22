@@ -11,7 +11,7 @@ router.get("/", (req, res) => {
 });
 
 router.post("/", (req, res) => {
-  const { asset_id, mine_id, type, description, priority, scheduled_at } = req.body;
+  const { asset_id, mine_id, type, description, priority, scheduled_at, triggered_by, assigned_to } = req.body;
   
   if (!asset_id || !mine_id || !type || !description) {
     return res.status(400).json({ error: "asset_id, mine_id, type, and description required" });
@@ -26,8 +26,8 @@ router.post("/", (req, res) => {
     description,
     status: "scheduled",
     priority: priority || "medium",
-    triggered_by: "manual",
-    assigned_to: "",
+    triggered_by: triggered_by || "manual",
+    assigned_to: assigned_to || "",
     scheduled_at: scheduled_at || new Date().toISOString(),
     completed_at: null,
     downtime_hours: null,
@@ -36,7 +36,7 @@ router.post("/", (req, res) => {
   };
   
   maintenanceRecords.push(record);
-  res.status(201).json(record);
+  res.status(201).json({ record });
 });
 
 router.patch("/:id/complete", (req, res) => {
@@ -50,21 +50,50 @@ router.patch("/:id/complete", (req, res) => {
   record.parts_used = req.body.parts_used || [];
   record.cost_ksh = req.body.cost_ksh || 0;
   
-  res.json(record);
+  res.json({ record });
 });
 
 router.get("/schedule", (req, res) => {
   const mineId = req.query.mine_id;
   
+  const filteredAssets = mineId 
+    ? assets.filter(a => a.mine_id === mineId) 
+    : assets;
+  
   const openRecs = maintenanceRecommendations
     .filter(r => r.status === "open")
     .sort((a, b) => b.estimated_failure_risk_percent - a.estimated_failure_risk_percent);
   
-  const result = mineId 
-    ? openRecs.map(r => ({ ...r, asset: assets.find(a => a.id === r.asset_id) })) 
-    : openRecs.map(r => ({ ...r, asset: assets.find(a => a.id === r.asset_id) }));
+  const schedule = filteredAssets.map(asset => {
+    const recs = openRecs.filter(r => r.asset_id === asset.id);
+    const hrs = asset.next_service_due_hours - asset.operating_hours;
+    const serviceUrgency = hrs < 0 ? "overdue" : hrs < 200 ? "imminent" : "upcoming";
+    
+    return {
+      asset_id: asset.id,
+      asset_tag: asset.asset_tag,
+      name: asset.name,
+      category: asset.category,
+      operating_hours: asset.operating_hours,
+      next_service_due_hours: asset.next_service_due_hours,
+      hours_to_service: hrs,
+      service_urgency,
+      open_recommendations: recs.length,
+    };
+  });
   
-  res.json(result);
+  const overdue = schedule.filter(a => a.service_urgency === "overdue").length;
+  const imminent = schedule.filter(a => a.service_urgency === "imminent").length;
+  const upcoming = schedule.filter(a => a.service_urgency === "upcoming").length;
+  
+  res.json({
+    schedule,
+    summary: {
+      overdue,
+      imminent_within_100_hours: schedule.filter(a => a.hours_to_service < 100 && a.hours_to_service >= 0).length,
+      upcoming_within_300_hours: schedule.filter(a => a.hours_to_service >= 100 && a.hours_to_service < 300).length,
+    },
+  });
 });
 
 router.get("/recommendations", (req, res) => {
@@ -75,7 +104,17 @@ router.get("/recommendations", (req, res) => {
     result = result.filter(r => r.mine_id === mineId);
   }
   
-  res.json(result);
+  const costAnalysis = {
+    total_preventive_cost_ksh: result.reduce((sum, r) => sum + (r.preventive_cost_ksh || 0), 0),
+    total_avoided_failure_cost_ksh: result.reduce((sum, r) => sum + (r.estimated_repair_cost_if_unaddressed_ksh || 0), 0),
+    estimated_roi_multiplier: Math.round((result.reduce((sum, r) => sum + (r.estimated_repair_cost_if_unaddressed_ksh || 0), 0) / Math.max(1, result.reduce((sum, r) => sum + (r.preventive_cost_ksh || 0), 0))) * 10) / 10,
+  };
+  
+  res.json({
+    recommendations: result,
+    count: result.length,
+    cost_analysis: costAnalysis,
+  });
 });
 
 router.post("/recommendations/generate", (req, res) => {
@@ -104,7 +143,7 @@ router.post("/recommendations/generate", (req, res) => {
   };
   
   maintenanceRecommendations.push(recommendation);
-  res.status(201).json(recommendation);
+  res.status(201).json({ recommendation });
 });
 
 router.patch("/recommendations/:id/acknowledge", (req, res) => {
@@ -115,7 +154,7 @@ router.patch("/recommendations/:id/acknowledge", (req, res) => {
   rec.status = "acknowledged";
   rec.acknowledged_at = new Date().toISOString();
   
-  res.json(rec);
+  res.json({ recommendation: rec });
 });
 
 module.exports = router;
