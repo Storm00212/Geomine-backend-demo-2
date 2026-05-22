@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { incidents, hazardZones, sensors, readings, mines } = require("../store");
+const { incidents, hazardZones, sensors } = require("../store");
 
 router.get("/dashboard", (req, res) => {
   const mineId = req.query.mine_id;
@@ -38,7 +38,10 @@ router.get("/incidents", (req, res) => {
     result = result.filter(i => i.resolved === isResolved);
   }
   
-  res.json(result);
+  res.json({
+    count: result.length,
+    incidents: result,
+  });
 });
 
 router.post("/incidents", (req, res) => {
@@ -49,7 +52,7 @@ router.post("/incidents", (req, res) => {
   }
   
   const incident = {
-    id: `inc-${Date.now()}`,
+    id: `inc-${Date.now()}`.slice(-8),
     mine_id,
     sensor_id: sensor_id || null,
     asset_id: null,
@@ -74,9 +77,9 @@ router.patch("/incidents/:id/resolve", (req, res) => {
   
   incident.resolved = true;
   incident.resolved_at = new Date().toISOString();
-  incident.resolution_note = req.body.notes || "Resolved";
+  incident.resolution_note = req.body.resolution_note || req.body.notes || "Resolved";
   
-  res.json(incident);
+  res.json({ incident });
 });
 
 router.get("/hazard-zones", (req, res) => {
@@ -95,7 +98,7 @@ router.post("/hazard-zones", (req, res) => {
   }
   
   const zone = {
-    id: `hz-${Date.now()}`,
+    id: `hz-${Date.now()}`.slice(-8),
     mine_id,
     name,
     type,
@@ -105,7 +108,7 @@ router.post("/hazard-zones", (req, res) => {
     active_from: new Date().toISOString(),
     active_until: null,
     reason: reason || "Safety hazard declared",
-    created_by: "API User",
+    created_by: "Safety API",
   };
   
   hazardZones.push(zone);
@@ -119,10 +122,41 @@ router.patch("/hazard-zones/:id/clear", (req, res) => {
   
   zone.status = "cleared";
   zone.active_until = new Date().toISOString();
-  zone.cleared_by = req.body.cleared_by || "API User";
-  zone.clear_reason = req.body.reason || "Zone cleared";
   
   res.json(zone);
+});
+
+router.post("/compliance/generate", (req, res) => {
+  const { mine_id, period_start, period_end, report_type } = req.body;
+  
+  if (!mine_id) {
+    return res.status(400).json({ error: "mine_id required" });
+  }
+  
+  const mineIncidents = incidents.filter(i => i.mine_id === mine_id);
+  const openIncidents = mineIncidents.filter(i => !i.resolved);
+  const criticalIncidents = openIncidents.filter(i => i.severity === "critical");
+  const mineSensors = sensors.filter(s => s.mine_id === mine_id);
+  
+  const status = criticalIncidents.length > 0 ? "NON-COMPLIANT" : openIncidents.length > 0 ? "CONDITIONALLY_COMPLIANT" : "COMPLIANT";
+  
+  res.json({
+    mine_id,
+    mine_name: "Kakamega Gold Belt – Site A",
+    license_number: "KE-MIN-2021-0042",
+    period: { start: period_start, end: period_end },
+    report_type: report_type || "safety_and_environmental",
+    generated_at: new Date().toISOString(),
+    summary: {
+      total_incidents: mineIncidents.length,
+      unresolved_incidents: openIncidents.length,
+      critical_incidents: criticalIncidents.length,
+      sensors_deployed: mineSensors.length,
+      sensors_online: mineSensors.filter(s => s.status === "online").length,
+      compliance_status: status,
+    },
+    submitted_to: "DOSHI",
+  });
 });
 
 module.exports = router;
